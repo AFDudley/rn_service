@@ -42,7 +42,7 @@ class RNOService(BaseService):
 
     # Sends the reply back to Requester and Reveal Host
     def send_replies(number, requester_address, reveal_host_address, publish_at, publish_on):
-        log.debug("rno reply", number=number, target_pubkey=target_pubkey, publish_at, publish_on)
+        log.debug("rno reply", number=number, requester_address=requester_address, publish_at=publish_at, publish_on=publish_on)
 
     # Generates the public address (IPFS?) that will be used by the Reveal Host
     def generate_public_address(number):
