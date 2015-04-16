@@ -22,7 +22,7 @@ class ETHProtocol(BaseProtocol):
     max_cmd_id = 15  # FIXME
     name = 'eth'
     version = 60
-    network_id = 0
+    network_id = 99107
 
     def __init__(self, peer, service):
         # required by P2PProtocol
