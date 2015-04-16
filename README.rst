@@ -18,5 +18,5 @@ More documentation to come soon...
 Status
 ------
 
-Working prototype
+RNO has just some method definition. It's not even been initialized.
 
