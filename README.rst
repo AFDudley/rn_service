@@ -5,9 +5,9 @@ Random Number Oracle
 Introduction
 ------------
 
-This is the Random Number Oracle, built based on pyethapp_.
+This is the Random Number Oracle, forked from pyethapp_.
 
-Theorical description can be found here RandomNumberOracle_.
+Detailed (unfinished) description can be found here RandomNumberOracle_.
 
 More documentation to come soon...
 
