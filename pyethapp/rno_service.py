@@ -41,8 +41,8 @@ class RNOService(BaseService):
         eccx = ECCx(None, self.config['eth']['privkey_hex'].decode('hex'));
 
 
-    # Process the transaction queue. The queue should be synchronized with add_transaction 
-    # to avoid concurrency problems.
+    # Process the transaction queue. There is no concurrency problem here since
+    # the Queue is thread-safe.
     def loop_body(self): 
         log.debug("rno body", my_address=my_address)
         while not transaction_queue.empty():
