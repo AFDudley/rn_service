@@ -34,11 +34,11 @@ class RNOService(BaseService):
     def __init__(self, app):
         log.info('Initializing rno')
         self.config = app.config
-        #self.interrupt = Event()
+        self.interrupt = Event()
         super(RNOService, self).__init__(app)
-        #my_address = privtoaddr(self.config['eth']['privkey_hex'].decode('hex'))
+        my_address = privtoaddr(self.config['eth']['privkey_hex'].decode('hex'))
         transaction_queue = Queue.Queue() # thread safe
-        #eccx = ECCx(None, self.config['eth']['privkey_hex'].decode('hex'));
+        eccx = ECCx(None, self.config['eth']['privkey_hex'].decode('hex'));
 
 
     # Process the transaction queue. The queue should be synchronized with add_transaction 
@@ -123,9 +123,9 @@ class RNOService(BaseService):
         self.interrupt.set()
 
     # @override BaseService._run (Greenlet._run)
-    #def _run(self):
-        #while True:
-        #    self.interrupt.wait()
-        #    self.loop_body(self)
-        #    self.interrupt.clear()
+    def _run(self):
+        while True:
+            self.interrupt.wait()
+            self.loop_body(self)
+            self.interrupt.clear()
             
