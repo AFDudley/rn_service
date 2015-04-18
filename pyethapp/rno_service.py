@@ -1,15 +1,13 @@
 # https://github.com/ethereum/go-ethereum/wiki/Blockpool
 import os
-
-from ethereum.utils import privtoaddr, sha3
-from devp2p.crypto import privtopub, ECCx, encrypt
-from ethereum.slogging import get_logger
-from devp2p.service import BaseService
-
 import Queue
-from gevent.event import Event
-from devp2p.crypto import ECCx, recover, _encode_sig
+
+from devp2p.crypto import privtopub, ECCx, encrypt, recover, _encode_sig
+from devp2p.service import BaseService
 from ethereum import transactions, processblock
+from ethereum.utils import privtoaddr, sha3
+from ethereum.slogging import get_logger
+from gevent.event import Event
 
 log = get_logger('rno')
 
