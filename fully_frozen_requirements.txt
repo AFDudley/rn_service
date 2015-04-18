@@ -3,7 +3,7 @@ click==4.0
 CodernityDB==0.4.2
 coverage==3.7.1
 decorator==3.4.2
-devp2p==0.0.5
+git+ssh://git@github.com/ethereum/pydevp2p@master#egg=devp2p
 ethereum==0.9.64
 gevent==1.0.1
 greenlet==0.4.5

@@ -6,5 +6,5 @@ wheel==0.24.0
 pyYAML==3.11
 werkzeug==0.10.4
 rlp==0.3.7
-devp2p==0.0.5
+git+ssh://git@github.com/ethereum/pydevp2p@master#egg=devp2p
 ethereum==0.9.64
