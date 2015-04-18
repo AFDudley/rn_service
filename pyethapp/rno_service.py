@@ -1,12 +1,10 @@
 # https://github.com/ethereum/go-ethereum/wiki/Blockpool
-import time
 import os
+
 from ethereum.utils import privtoaddr, sha3
 from devp2p.crypto import privtopub, ECCx, encrypt
-from rlp.utils import encode_hex
 from ethereum.slogging import get_logger
 from devp2p.service import BaseService
-import eth_protocol
 
 import Queue
 from gevent.event import Event
@@ -37,9 +35,8 @@ class RNOService(BaseService):
         self.interrupt = Event()
         super(RNOService, self).__init__(app)
         my_address = privtoaddr(self.config['eth']['privkey_hex'].decode('hex'))
-        transaction_queue = Queue.Queue() # thread safe
-        eccx = ECCx(None, self.config['eth']['privkey_hex'].decode('hex'));
-
+        transaction_queue = Queue.Queue()  # thread safe
+        eccx = ECCx(None, self.config['eth']['privkey_hex'].decode('hex'))
 
     # Process the transaction queue. There is no concurrency problem here since
     # the Queue is thread-safe.
@@ -48,14 +45,14 @@ class RNOService(BaseService):
         while not transaction_queue.empty():
             tx = transaction_queue.get()
             target_address = tx.fields['to']
-            if (target_address.__dict__ == my_address.__dict__):
+            if target_address.__dict__ == my_address.__dict__:
                 process_transaction(tx)
 
     # Transactions should be added to a queue so that 'loop_body' process that queue
     # To minimize code dependency and coupling, this method will be called for ALL
     # transactions received. 
     # It is called in the loop of eth_service.py -> on_receive_transactions
-    def add_transaction(tx):
+    def add_transaction(self, tx):
         log.debug("rno received transaction", transaction=transaction)
         # All transactions are being queue here to minizize the blocking
         # of caller's thread. Transactions not addressed to rno are discarded 
@@ -64,7 +61,7 @@ class RNOService(BaseService):
 
     # This method is the core of the RNO. Transactions should NOT be processed in the 
     # add_transaction otherwise it would block the caller.
-    def process_transaction(tx):
+    def process_transaction(self, tx):
         log.debug("process tx", tx=tx)
 
         # 1) find out sender's address
@@ -72,7 +69,7 @@ class RNOService(BaseService):
 
         # 2) Extract sender's pubkey from the Electrum-style signature of the tx
         encoded_signature = _encode_sig(tx.fields['v'], tx.fields['r'], tx.field['s'])
-        message = None # TODO: find out how to build the data (message) where the signature is applied.
+        message = None  # TODO: find out how to build the data (message) where the signature is applied.
         sender_pubkey = recover(message, encoded_signature)
 
         # 3) generate the random number
@@ -97,35 +94,33 @@ class RNOService(BaseService):
         # Took from buterin example: https://blog.ethereum.org/2014/04/10/pyethereum-and-serpent-programming-guide/
         start_gas = 10000
         to = sender_address
-        value = 0 # It's just a message, don't need to send any value (TODO: confirm that info)
+        value = 0  # It's just a message, don't need to send any value (TODO: confirm that info)
 
         # data is a json formatted message but has to be 'binary'
-        data = 0 # TODO
+        data = 0  # TODO
         reply_tx = transactions.Transaction(nonce, gas_price, start_gas, to, value, data).sign(self.config['eth']['privkey_hex'].decode('hex'))
         processblock.apply_transaction(current_block, reply_tx)
 
         # 7) create/send transaction to revel host.
         # this is not specified yet
 
-
     # Sends the reply back to Requester and Reveal Host
-    def send_replies(number, requester_address, reveal_host_address, publish_at, publish_on):
+    def send_replies(self, number, requester_address, reveal_host_address, publish_at, publish_on):
         log.debug("rno reply", number=number, requester_address=requester_address, publish_at=publish_at, publish_on=publish_on)
 
     # Generates the public address (IPFS?) that will be used by the Reveal Host
-    def generate_public_address(number):
+    def generate_public_address(self, number):
         address = 'some public address'
         log.debug("rno pub address", address=address)
         return address
 
     # This will make the loop_body be executed by RNOService thread.
-    def wakeup():
+    def wakeup(self):
         self.interrupt.set()
 
     # @override BaseService._run (Greenlet._run)
     def _run(self):
         while True:
             self.interrupt.wait()
-            self.loop_body(self)
+            self.loop_body()
             self.interrupt.clear()
-            
