@@ -1,10 +1,13 @@
 CodernityDB==0.4.2
 click==4.0
 decorator==3.4.2
+
 gevent==1.0.1
-wheel==0.24.0
+
+leveldb==0.193
 pyYAML==3.11
 werkzeug==0.10.4
-rlp==0.3.7
-git+ssh://git@github.com/ethereum/pydevp2p@master#egg=devp2p
-ethereum==0.9.64
+wheel==0.24.0
+https://github.com/ethereum/pyethereum/tarball/6b1c09438d
+https://github.com/ethereum/pydevp2p/tarball/a0a6f327bd
+https://github.com/ethereum/pyrlp/tarball/dcff921205
