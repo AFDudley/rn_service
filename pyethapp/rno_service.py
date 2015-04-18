@@ -34,18 +34,18 @@ class RNOService(BaseService):
         self.config = app.config
         self.interrupt = Event()
         super(RNOService, self).__init__(app)
-        my_address = privtoaddr(self.config['eth']['privkey_hex'].decode('hex'))
-        transaction_queue = Queue.Queue()  # thread safe
-        eccx = ECCx(None, self.config['eth']['privkey_hex'].decode('hex'))
+        self.my_address = privtoaddr(self.config['eth']['privkey_hex'].decode('hex'))
+        self.transaction_queue = Queue.Queue()  # thread safe
+        self.eccx = ECCx(None, self.config['eth']['privkey_hex'].decode('hex'))
 
     # Process the transaction queue. There is no concurrency problem here since
     # the Queue is thread-safe.
     def loop_body(self): 
-        log.debug("rno body", my_address=my_address)
-        while not transaction_queue.empty():
-            tx = transaction_queue.get()
+        log.debug("rno body", my_address=self.my_address)
+        while not self.transaction_queue.empty():
+            tx = self.transaction_queue.get()
             target_address = tx.fields['to']
-            if target_address.__dict__ == my_address.__dict__:
+            if target_address.__dict__ == self.my_address.__dict__:
                 process_transaction(tx)
 
     # Transactions should be added to a queue so that 'loop_body' process that queue
@@ -57,7 +57,7 @@ class RNOService(BaseService):
         # All transactions are being queue here to minizize the blocking
         # of caller's thread. Transactions not addressed to rno are discarded 
         # in loop_body.
-        transaction_queue.put(tx)
+        self.transaction_queue.put(tx)
 
     # This method is the core of the RNO. Transactions should NOT be processed in the 
     # add_transaction otherwise it would block the caller.
@@ -76,7 +76,7 @@ class RNOService(BaseService):
         number = os.urandom(32)
 
         # 4) encrypt RN using sender's pubkey (eRN1)
-        encrypted_number = eccx.encrypt(number, sender_pubkey)
+        encrypted_number = self.eccx.encrypt(number, sender_pubkey)
 
         # 5) encrypt RN using reveal host's pubkey (eRN2) (???)
         # this is not specified yet
@@ -86,7 +86,7 @@ class RNOService(BaseService):
         # nonce = number of transactions already sent by that account
         chain = self.app.services.chain.chain
         current_block = chain.head
-        nonce = block.get_nonce(my_address)
+        nonce = block.get_nonce(self.my_address)
 
         # Took from buterin example: https://blog.ethereum.org/2014/04/10/pyethereum-and-serpent-programming-guide/
         gas_price = 10**12 
