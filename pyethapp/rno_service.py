@@ -46,14 +46,14 @@ class RNOService(BaseService):
             tx = self.transaction_queue.get()
             target_address = tx.fields['to']
             if target_address.__dict__ == self.my_address.__dict__:
-                process_transaction(tx)
+                self.process_transaction(tx)
 
     # Transactions should be added to a queue so that 'loop_body' process that queue
     # To minimize code dependency and coupling, this method will be called for ALL
     # transactions received. 
     # It is called in the loop of eth_service.py -> on_receive_transactions
     def add_transaction(self, tx):
-        log.debug("rno received transaction", transaction=transaction)
+        log.debug("rno received transaction", transaction=tx)
         # All transactions are being queue here to minizize the blocking
         # of caller's thread. Transactions not addressed to rno are discarded 
         # in loop_body.
