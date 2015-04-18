@@ -9,5 +9,5 @@ pyYAML==3.11
 werkzeug==0.10.4
 wheel==0.24.0
 https://github.com/ethereum/pyethereum/tarball/6b1c09438d
-https://github.com/ethereum/pydevp2p/tarball/a0a6f327bd
+https://github.com/consensys/pydevp2p/tarball/cdc16e8f4a
 https://github.com/ethereum/pyrlp/tarball/dcff921205
