@@ -5,7 +5,7 @@ decorator==3.4.2
 gevent==1.0.1
 wheel==0.24.0
 ipython==3.1.0
-werkzeug==0.10.0
+werkzeug==0.10.4
 https://github.com/ethereum/pyrlp/tarball/78f9ac7
 https://github.com/ethereum/pydevp2p/tarball/bbd6ace
 https://github.com/ethereum/pyethereum/tarball/a4d962d
