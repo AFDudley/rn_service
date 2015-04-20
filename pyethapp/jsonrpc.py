@@ -1,7 +1,10 @@
+from copy import deepcopy
 from decorator import decorator
 from collections import Iterable
 import inspect
-from ethereum.utils import is_numeric, is_string, int_to_big_endian, encode_hex, decode_hex, sha3
+import ethereum.blocks
+from ethereum.utils import (is_numeric, is_string, int_to_big_endian, encode_hex, decode_hex, sha3,
+                            zpad)
 import ethereum.slogging as slogging
 from ethereum.transactions import Transaction
 from ethereum import processblock
@@ -131,7 +134,7 @@ class JSONRPCServer(BaseService):
         log.info('stopping JSONRPCServer')
         self.wsgi_thread.kill()
 
-    def get_block(self, chain, block_id=None):
+    def get_block(self, block_id=None):
         """Return the block identified by `block_id`.
 
         This method also sets :attr:`default_block` to the value of `block_id`
@@ -143,7 +146,8 @@ class JSONRPCServer(BaseService):
         :param block_id: either the block number as integer or 'pending',
                         'earliest' or 'latest', or `None` for the default
                         block
-        :raises: `BadRequestError` if the block does not exist
+        :returns: the requested block
+        :raises: :exc:`KeyError` if the block does not exist
         """
         assert 'chain' in self.app.services
         chain = self.app.services.chain.chain
@@ -157,17 +161,14 @@ class JSONRPCServer(BaseService):
             return chain.head
         if block_id == 'earliest':
             return chain.genesis
-        try:
-            if is_numeric(block_id):
-                # by number
-                hash_ = chain.index.get_block_by_number(block_id)
-            else:
-                # by hash
-                assert is_string(block_id)
-                hash_ = block_id
-            return chain.get(hash_)
-        except KeyError:
-            raise BadRequestError('Unknown block')
+        if is_numeric(block_id):
+            # by number
+            hash_ = chain.index.get_block_by_number(block_id)
+        else:
+            # by hash
+            assert is_string(block_id)
+            hash_ = block_id
+        return chain.get(hash_)
 
 
 class Subdispatcher(object):
@@ -209,7 +210,8 @@ class Subdispatcher(object):
 
 
 def quantity_decoder(data):
-    """Decode `data` representing a quantity."""
+    """Decode `data` representing a quantity.
+    """
     if not is_string(data):
         success = False
     elif not data.startswith('0x'):
@@ -243,8 +245,6 @@ def data_decoder(data):
     if len(data) % 2 != 0:
         success = False  # must be even length
     else:
-        if len(data) % 2 != 0:  # TODO: remove
-            data += '0'         # TODO: remove
         try:
             return decode_hex(data[2:])
         except TypeError:
@@ -253,9 +253,17 @@ def data_decoder(data):
     raise BadRequestError('Invalid data encoding')
 
 
-def data_encoder(data):
-    """Encode unformatted binary `data`."""
-    return '0x' + encode_hex(data)
+def data_encoder(data, length=None):
+    """Encode unformatted binary `data`.
+
+    If `length` is given, the result will be padded like this: ``quantity_encoder(255, 3) ==
+    '0x0000ff'``.
+    """
+    s = encode_hex(data)
+    if length is None:
+        return '0x' + s
+    else:
+        return '0x' + s.rjust(length * 2, '0')
 
 
 def address_decoder(data):
@@ -317,11 +325,12 @@ def block_encoder(block, include_transactions, pending=False):
         'parentHash': data_encoder(block.prevhash),
         'nonce': data_encoder(block.nonce),
         'sha3Uncles': data_encoder(block.uncles_hash),
-        'logsBloom': data_encoder(int_to_big_endian(block.bloom)),
+        'logsBloom': data_encoder(int_to_big_endian(block.bloom), 256),
         'transactionsRoot': data_encoder(block.tx_list_root),
         'stateRoot': data_encoder(block.state_root),
         'miner': data_encoder(block.coinbase),
         'difficulty': quantity_encoder(block.difficulty),
+        'coinbase': address_encoder(block.coinbase),
         'totalDifficulty': quantity_encoder(block.chain_difficulty()),
         'extraData': data_encoder(block.extra_data),
         'size': quantity_encoder(len(rlp.encode(block))),
@@ -336,7 +345,7 @@ def block_encoder(block, include_transactions, pending=False):
         for i, tx in enumerate(block.get_transactions()):
             d['transactions'].append(tx_encoder(tx, block, i, pending))
     else:
-        d['transactions'] = [quantity_encoder(tx.hash) for x in block.get_transactions()]
+        d['transactions'] = [data_encoder(tx.hash) for tx in block.get_transactions()]
     return d
 
 
@@ -350,7 +359,7 @@ def tx_encoder(transaction, block, i, pending):
         'hash': data_encoder(transaction.hash),
         'nonce': quantity_encoder(transaction.nonce),
         'blockHash': data_encoder(block.hash),
-        'blockNumber': quantity_encoder(block.number) if pending else None,
+        'blockNumber': quantity_encoder(block.number) if not pending else None,
         'transactionIndex': quantity_encoder(i),
         'from': data_encoder(transaction.sender),
         'to': data_encoder(transaction.to),
@@ -430,7 +439,7 @@ class Net(Subdispatcher):
 
     @public
     def version(self):
-        return ETHProtocol.version
+        return str(ETHProtocol.version)
 
     @public
     def listening(self):
@@ -600,24 +609,33 @@ class Chain(Subdispatcher):
 
     @public
     @decode_arg('block_id', block_id_decoder)
-    @encode_res(quantity_encoder)
-    def getBlockTransactionCountByNumber(self, block_id=None):
-        block = self.json_rpc_server.get_block(block_id)
-        return block.transaction_count
+    def getBlockTransactionCountByNumber(self, block_id):
+        try:
+            block = self.json_rpc_server.get_block(block_id)
+        except KeyError:
+            return None
+        else:
+            return quantity_encoder(block.transaction_count)
 
     @public
     @decode_arg('block_hash', block_hash_decoder)
-    @encode_res(quantity_encoder)
     def getUncleCountByBlockHash(self, block_hash):
-        block = self.json_rpc_server.get_block(block_hash)
-        return len(block.uncles)
+        try:
+            block = self.json_rpc_server.get_block(block_hash)
+        except KeyError:
+            return None
+        else:
+            return quantity_encoder(len(block.uncles))
 
     @public
     @decode_arg('block_id', block_id_decoder)
-    @encode_res(quantity_encoder)
-    def getUncleCountByBlockNumber(self, block_id=None):
-        block = self.json_rpc_server.get_block(block_id)
-        return len(block.uncles)
+    def getUncleCountByBlockNumber(self, block_id):
+        try:
+            block = self.json_rpc_server.get_block(block_id)
+        except KeyError:
+            return None
+        else:
+            return quantity_encoder(len(block.uncles))
 
     @public
     @decode_arg('address', address_decoder)
@@ -631,14 +649,20 @@ class Chain(Subdispatcher):
     @decode_arg('block_hash', block_hash_decoder)
     @decode_arg('include_transactions', bool_decoder)
     def getBlockByHash(self, block_hash, include_transactions):
-        block = self.json_rpc_server.get_block(block_hash)
+        try:
+            block = self.json_rpc_server.get_block(None, block_hash)
+        except KeyError:
+            return None
         return block_encoder(block, include_transactions)
 
     @public
     @decode_arg('block_id', block_id_decoder)
     @decode_arg('include_transactions', bool_decoder)
     def getBlockByNumber(self, block_id, include_transactions):
-        block = self.json_rpc_server.get_block(block_id)
+        try:
+            block = self.json_rpc_server.get_block(None, block_id)
+        except KeyError:
+            return None
         return block_encoder(block, include_transactions)
 
     @public
@@ -647,7 +671,7 @@ class Chain(Subdispatcher):
         try:
             tx, block, index = self.chain.chain.index.get_transaction(tx_hash)
         except KeyError:
-            raise BadRequestError('Unknown transaction')
+            return None
         return tx_encoder(tx, block, index, False)
 
     @public
@@ -658,7 +682,7 @@ class Chain(Subdispatcher):
         try:
             tx = block.get_transaction(index)
         except IndexError:
-            raise BadRequestError('Unknown transaction')
+            return None
         return tx_encoder(tx, block, index, False)
 
     @public
@@ -669,7 +693,7 @@ class Chain(Subdispatcher):
         try:
             tx = block.get_transaction(index)
         except IndexError:
-            raise BadRequestError('Unknown transaction')
+            return None
         return tx_encoder(tx, block, index, block_id == 'pending')
 
     @public
@@ -678,9 +702,9 @@ class Chain(Subdispatcher):
     def getUncleByBlockHashAndIndex(self, block_hash, index):
         block = self.json_rpc_server.get_block(block_hash)
         try:
-            uncle_hash = block.uncles[index]
+            uncle_hash = block.uncles[index].hash
         except IndexError:
-            raise BadRequestError('Unknown uncle')
+            return None
         return block_encoder(self.json_rpc_server.get_block(uncle_hash))
 
     @public
@@ -689,10 +713,50 @@ class Chain(Subdispatcher):
     def getUncleByBlockNumberAndIndex(self, block_number, index):
         block = self.json_rpc_server.get_block(block_number)
         try:
-            uncle_hash = block.uncles[index]
+            uncle_hash = block.uncles[index].hash
         except IndexError:
-            raise BadRequestError('Unknown uncle')
+            return None
         return block_encoder(self.json_rpc_server.get_block(uncle_hash))
+
+    @public
+    def getWork(self):
+        print 'Sending work...'
+        h = self.chain.chain.head_candidate
+        return [
+            encode_hex(h.header.mining_hash),
+            encode_hex(h.header.seed),
+            encode_hex(zpad(int_to_big_endian(2**256 // h.header.difficulty), 32))
+        ]
+
+    @public
+    def test(self, nonce):
+        print 80808080808
+        return nonce
+
+    @public
+    @decode_arg('nonce', data_decoder)
+    @decode_arg('mining_hash', data_decoder)
+    @decode_arg('mix_digest', data_decoder)
+    def submitWork(self, nonce, mining_hash, mix_digest):
+        print 'submitting work'
+        h = self.chain.chain.head_candidate
+        print 'header: %s' % encode_hex(rlp.encode(h))
+        if h.header.mining_hash != mining_hash:
+            return False
+        print 'mining hash: %s' % encode_hex(mining_hash)
+        print 'nonce: %s' % encode_hex(nonce)
+        print 'mixhash: %s' % encode_hex(mix_digest)
+        print 'seed: %s' % encode_hex(h.header.seed)
+        h.header.nonce = nonce
+        h.header.mixhash = mix_digest
+        if not h.header.check_pow():
+            print 'PoW check false'
+            return False
+        print 'PoW check true'
+        self.chain.chain.add_block(h)
+        self.chain.broadcast(h)
+        print 'Added: %d' % h.header.number
+        return True
 
     @public
     @encode_res(data_encoder)
@@ -701,15 +765,24 @@ class Chain(Subdispatcher):
 
     @public
     @decode_arg('block_id', block_id_decoder)
+    @encode_res(data_encoder)
     def call(self, data, block_id=None):
         block = self.json_rpc_server.get_block(block_id)
+        state_root_before = block.state_root
+
         # rebuild block state before finalization
-        parent = block.get_parent()
-        test_block = block.init_from_parent(parent, block.coinbase,
-                                            timestamp=block.timestamp)
-        for tx in block.get_transactions():
-            success, output = processblock.apply_transaction(test_block, tx)
-            assert success
+        if block.has_parent():
+            parent = block.get_parent()
+            test_block = block.init_from_parent(parent, block.coinbase,
+                                                timestamp=block.timestamp)
+            for tx in block.get_transactions():
+                success, output = processblock.apply_transaction(test_block, tx)
+                assert success
+        else:
+            original = block.snapshot()
+            original['journal'] = deepcopy(original['journal'])  # do not alter original journal
+            test_block = ethereum.blocks.genesis(block.db)
+            test_block.revert(original)
 
         # validate transaction
         if not isinstance(data, dict):
@@ -735,15 +808,15 @@ class Chain(Subdispatcher):
             sender = address_decoder(data['from'])
         except KeyError:
             sender = '\x00' * 20
-        # initialize transaction
-        nonce = block.get_nonce(sender)
+        # apply transaction
+        nonce = test_block.get_nonce(sender)
         tx = Transaction(nonce, gasprice, startgas, to, value, data_)
         tx.sender = sender
-        # apply transaction
         try:
             success, output = processblock.apply_transaction(test_block, tx)
         except processblock.InvalidTransaction:
             success = False
+        assert block.state_root == state_root_before
         if success:
             return output
         else:
@@ -828,8 +901,10 @@ class FilterManager(Subdispatcher):
         if not required_keys.issubset(set(filter_dict.keys())):
             raise BadRequestError('Invalid filter object')
 
-        b0 = self.json_rpc_server.get_block(filter_dict['fromBlock'])
-        b1 = self.json_rpc_server.get_block(filter_dict['toBlock'])
+        b0 = self.json_rpc_server.get_block(block_id_decoder(filter_dict['fromBlock']))
+        b1 = self.json_rpc_server.get_block(block_id_decoder(filter_dict['toBlock']))
+        if b1.number < b0.number:
+            raise BadRequestError('fromBlock must be prior or equal to toBlock')
         address = filter_dict.get('address', None)
         if is_string(address):
             addresses = [address_decoder(address)]
@@ -841,10 +916,10 @@ class FilterManager(Subdispatcher):
             raise JSONRPCInvalidParamsError('Parameter must be address or list of addresses')
         topics = [data_decoder(topic) for topic in filter_dict.get('topics', [])]
 
-        blocks = [b0]
+        blocks = [b1]
         while blocks[-1] != b1:
             blocks.append(blocks[-1].get_parent())
-        filter_ = Filter(self.chain.chain, blocks, addresses, topics)
+        filter_ = Filter(self.chain.chain, reversed(blocks), addresses, topics)
         self.filters[self.next_id] = filter_
         self.next_id += 1
         return self.next_id - 1
