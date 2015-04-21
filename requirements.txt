@@ -1,5 +1,5 @@
 CodernityDB==0.4.2
-leveldb==0.1
+leveldb==0.193
 click==4.0
 decorator==3.4.2
 gevent==1.0.1
