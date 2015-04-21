@@ -4,6 +4,7 @@ click==4.0
 decorator==3.4.2
 gevent==1.0.1
 wheel==0.24.0
+pyyaml==3.11
 ipython==3.1.0
 werkzeug==0.10.4
 https://github.com/ethereum/pyrlp/tarball/develop
